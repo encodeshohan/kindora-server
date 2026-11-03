@@ -32,6 +32,12 @@ const db = mongoClient.db("kindora");
 const eventsCollection = db.collection("events");
 const joinedEventsCollection = db.collection("joinedEvents");
 
+
+await joinedEventsCollection.createIndex(
+    { eventId: 1, userEmail: 1 },
+    { unique: true },
+);
+
 const JWKS = createRemoteJWKSet(
     new URL(`${process.env.CLIENT_URL}/api/auth/jwks`),
 );
@@ -257,6 +263,18 @@ app.patch("/events/:id", verifyToken, async (req, res) => {
         { _id: event._id },
         { $set: { ...data, updatedAt: new Date().toISOString() } },
     );
+    await joinedEventsCollection.updateMany(
+        { eventId: event._id },
+        {
+            $set: {
+                title: data.title,
+                type: data.type,
+                thumbnail: data.thumbnail,
+                location: data.location,
+                date: data.date,
+            },
+        },
+    );
     res.send({ message: "Event updated successfully" });
 });
 
@@ -267,6 +285,85 @@ app.delete("/events/:id", verifyToken, async (req, res) => {
     await eventsCollection.deleteOne({ _id: event._id });
     await joinedEventsCollection.deleteMany({ eventId: event._id });
     res.send({ message: "Event deleted successfully" });
+});
+
+app.post("/events/:id/join", verifyToken, async (req, res) => {
+    const { id } = req.params;
+    if (!OBJECT_ID_PATTERN.test(id)) {
+        return res.status(400).send({ message: "Invalid event id" });
+    }
+
+    const event = await eventsCollection.findOne({ _id: new ObjectId(id) });
+    if (!event) {
+        return res.status(404).send({ message: "Event not found" });
+    }
+    if (event.date < getToday()) {
+        return res
+            .status(400)
+            .send({ message: "This event has already taken place" });
+    }
+
+    const joinedEvent = {
+        eventId: event._id,
+        title: event.title,
+        type: event.type,
+        thumbnail: event.thumbnail,
+        location: event.location,
+        date: event.date,
+        userEmail: req.user.email,
+        userName: req.user.name ?? "",
+        userPhoto: req.user.image ?? "",
+        joinedAt: new Date().toISOString(),
+    };
+
+    try {
+        await joinedEventsCollection.insertOne(joinedEvent);
+    } catch (err) {
+        if (err.code === 11000) {
+            return res
+                .status(409)
+                .send({ message: "You have already joined this event" });
+        }
+        throw err;
+    }
+    res.status(201).send({ message: "Joined event successfully" });
+});
+
+app.get("/events/:id/join-status", verifyToken, async (req, res) => {
+    const { id } = req.params;
+    if (!OBJECT_ID_PATTERN.test(id)) {
+        return res.status(400).send({ message: "Invalid event id" });
+    }
+    const joined = await joinedEventsCollection.findOne({
+        eventId: new ObjectId(id),
+        userEmail: req.user.email,
+    });
+    res.send({ joined: Boolean(joined) });
+});
+
+app.delete("/events/:id/join", verifyToken, async (req, res) => {
+    const { id } = req.params;
+    if (!OBJECT_ID_PATTERN.test(id)) {
+        return res.status(400).send({ message: "Invalid event id" });
+    }
+    const result = await joinedEventsCollection.deleteOne({
+        eventId: new ObjectId(id),
+        userEmail: req.user.email,
+    });
+    if (result.deletedCount === 0) {
+        return res
+            .status(404)
+            .send({ message: "You have not joined this event" });
+    }
+    res.send({ message: "You have left the event" });
+});
+
+app.get("/joined-events", verifyToken, async (req, res) => {
+    const result = await joinedEventsCollection
+        .find({ userEmail: req.user.email })
+        .sort({ date: 1, joinedAt: 1 })
+        .toArray();
+    res.send(result);
 });
 
 // ===== ROUTES GO ABOVE THIS LINE (added in S2-S4) =====
