@@ -12,6 +12,9 @@ if (!process.env.MONGODB_URI || !process.env.CLIENT_URL) {
     throw new Error("Missing MONGODB_URI or CLIENT_URL in environment variables");
 }
 
+// Remove any trailing slash so CORS, the JWKS URL and the token checks all use the same value.
+const CLIENT_URL = process.env.CLIENT_URL.replace(/\/+$/, "");
+
 const client = new MongoClient(process.env.MONGODB_URI);
 
 async function connectToMongoDB() {
@@ -24,8 +27,16 @@ async function connectToMongoDB() {
     }
 }
 
-app.use(cors({ origin: process.env.CLIENT_URL }));
-app.use(express.json());
+app.disable("x-powered-by");
+app.use(
+    cors({
+        origin: CLIENT_URL,
+        methods: ["GET", "POST", "PATCH", "DELETE"],
+        allowedHeaders: ["Content-Type", "Authorization"],
+        maxAge: 86400,
+    }),
+);
+app.use(express.json({ limit: "20kb" }));
 
 const mongoClient = await connectToMongoDB();
 const db = mongoClient.db("kindora");
@@ -38,9 +49,11 @@ await joinedEventsCollection.createIndex(
     { unique: true },
 );
 
-const JWKS = createRemoteJWKSet(
-    new URL(`${process.env.CLIENT_URL}/api/auth/jwks`),
-);
+await eventsCollection.createIndex({ date: 1, _id: 1 });
+await eventsCollection.createIndex({ creatorEmail: 1, date: 1 });
+await joinedEventsCollection.createIndex({ userEmail: 1, date: 1 });
+
+const JWKS = createRemoteJWKSet(new URL(`${CLIENT_URL}/api/auth/jwks`));
 
 const verifyToken = async (req, res, next) => {
     const authHeader = req.headers.authorization;
@@ -52,8 +65,8 @@ const verifyToken = async (req, res, next) => {
 
     try {
         const { payload } = await jwtVerify(token, JWKS, {
-            issuer: process.env.CLIENT_URL,
-            audience: process.env.CLIENT_URL,
+            issuer: CLIENT_URL,
+            audience: CLIENT_URL,
         });
 
         if (!payload.email) {
@@ -101,10 +114,9 @@ const isValidDateString = (value) => {
     );
 };
 
-const isHttpUrl = (value) => {
+const isHttpsUrl = (value) => {
     try {
-        const url = new URL(value);
-        return url.protocol === "http:" || url.protocol === "https:";
+        return new URL(value).protocol === "https:";
     } catch {
         return false;
     }
@@ -132,8 +144,8 @@ const validateEventBody = (body, currentDate) => {
     if (!EVENT_TYPES.includes(data.type)) {
         return { error: "Invalid event type" };
     }
-    if (!isHttpUrl(data.thumbnail)) {
-        return { error: "Thumbnail must be a valid http or https URL" };
+    if (data.thumbnail.length > 2048 || !isHttpsUrl(data.thumbnail)) {
+        return { error: "Thumbnail must be a valid https URL" };
     }
     if (data.location.length < 2 || data.location.length > 150) {
         return { error: "Location must be between 2 and 150 characters" };
@@ -175,9 +187,6 @@ app.get("/", (req, res) => {
     res.send({ message: "Kindora Express Server is running!" });
 });
 
-app.get("/me", verifyToken, (req, res) => {
-    res.send({ email: req.user.email, name: req.user.name });
-});
 
 // ===== S3 EVENT ROUTES =====
 
@@ -375,6 +384,9 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
     if (err.type === "entity.parse.failed") {
         return res.status(400).send({ message: "Invalid JSON body" });
+    }
+    if (err.type === "entity.too.large") {
+        return res.status(413).send({ message: "Request body is too large" });
     }
     console.error(err);
     res.status(500).send({ message: "Internal server error" });
