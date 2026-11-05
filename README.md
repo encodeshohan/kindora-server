@@ -2,8 +2,8 @@
 
 Express 5 and MongoDB API for the KINDORA Social Development Events Platform.
 
-🌐 **Live Website:** [KINDORA](https://kindora-encodeshohan.vercel.app/)
-📦 **Backend Repository:** [encodeshohan/kindora-server](https://github.com/encodeshohan/kindora-server)
+🌐 **Live Website:** [KINDORA](https://kindora-encodeshohan.vercel.app/) <br>
+📦 **Backend Repository:** [encodeshohan/kindora-server](https://github.com/encodeshohan/kindora-server) <br>
 🎨 **Frontend Repository:** [encodeshohan/kindora](https://github.com/encodeshohan/kindora)
 
 ---
