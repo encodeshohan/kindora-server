@@ -1,4 +1,3 @@
-
 import express from "express";
 import "dotenv/config";
 import { MongoClient, ObjectId } from "mongodb";
