@@ -255,7 +255,10 @@ app.get("/events/:id", async (req, res) => {
     if (!event) {
         return res.status(404).send({ message: "Event not found" });
     }
-    res.send(event);
+    const joinedCount = await joinedEventsCollection.countDocuments({
+        eventId: event._id,
+    });
+    res.send({ ...event, joinedCount });
 });
 
 app.patch("/events/:id", verifyToken, async (req, res) => {
