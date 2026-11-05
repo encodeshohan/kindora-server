@@ -39,7 +39,7 @@ app.use(
 app.use(express.json({ limit: "20kb" }));
 
 const mongoClient = await connectToMongoDB();
-const db = mongoClient.db("kindora");
+const db = mongoClient.db(process.env.DB_NAME ?? "kindora");
 const eventsCollection = db.collection("events");
 const joinedEventsCollection = db.collection("joinedEvents");
 

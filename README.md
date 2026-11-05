@@ -17,6 +17,7 @@ the client's public keys (`/api/auth/jwks`).
 | Name | Description |
 |---|---|
 | `MONGODB_URI` | MongoDB connection string |
+| `DB_NAME` | Database name (defaults to `kindora`). Use a different name for production |
 | `CLIENT_URL` | Deployed client origin, e.g. `https://your-client.vercel.app` (no trailing slash). Must match the client's `BETTER_AUTH_URL` |
 | `PORT` | Local port (defaults to 8000, ignored on Vercel) |
 
